@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#111827" />
+  <!-- ADSENSE_HEAD -->
+  <title>TestForge AI — Smart Test Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="TestForge AI home">
+      <span class="brand-mark">TF</span>
+      <span>TestForge <b>AI</b></span>
+    </a>
+    <div class="top-actions">
+      <span id="aiBadge" class="status-badge">Checking AI…</span>
+      <button class="ghost-btn" id="newTestTop">New Test</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="setupScreen" class="screen active">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <div class="eyebrow">AI-POWERED PRACTICE</div>
+          <h1>Turn any topic into a <span>timed test.</span></h1>
+          <p>Create up to 50 MCQs with difficulty, marking scheme, negative marking and time controls. Answers stay hidden until submission.</p>
+          <div class="feature-row">
+            <div><strong>≤ 50</strong><span>Questions</span></div>
+            <div><strong>AI</strong><span>Generated</span></div>
+            <div><strong>Live</strong><span>Timer</span></div>
+            <div><strong>Auto</strong><span>Scoring</span></div>
+          </div>
+        </div>
+
+        <form id="generatorForm" class="builder-card">
+          <div class="card-heading">
+            <div>
+              <span class="mini-label">CREATE TEST</span>
+              <h2>Test Settings</h2>
+            </div>
+            <div class="spark">✦</div>
+          </div>
+
+          <label class="field full">
+            <span>Topic *</span>
+            <input id="topic" required maxlength="180" placeholder="e.g. X-Ray Tube and Production" />
+          </label>
+
+          <label class="field full">
+            <span>Exam / Category</span>
+            <input id="exam" maxlength="100" placeholder="e.g. JKSSB Radiographer" />
+          </label>
+
+          <div class="two-col">
+            <label class="field">
+              <span>Questions</span>
+              <input id="count" type="number" min="5" max="50" value="20" />
+              <small>Maximum 50</small>
+            </label>
+            <label class="field">
+              <span>Time (minutes)</span>
+              <input id="minutes" type="number" min="1" max="180" value="20" />
+            </label>
+          </div>
+
+          <div class="two-col">
+            <label class="field">
+              <span>Difficulty</span>
+              <select id="difficulty">
+                <option>Easy</option>
+                <option selected>Moderate</option>
+                <option>Hard</option>
+                <option>Mixed</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Language</span>
+              <select id="language">
+                <option selected>English</option>
+                <option>Hindi</option>
+                <option>Hinglish</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="two-col">
+            <label class="field">
+              <span>Marks / correct</span>
+              <input id="marks" type="number" min="0.25" max="10" step="0.25" value="1" />
+            </label>
+            <label class="field">
+              <span>Negative / wrong</span>
+              <input id="negative" type="number" min="0" max="10" step="0.25" value="0.25" />
+            </label>
+          </div>
+
+          <div class="presets" aria-label="Marking presets">
+            <button type="button" data-marks="1" data-negative="0.25">+1 / −0.25</button>
+            <button type="button" data-marks="2" data-negative="0.5">+2 / −0.5</button>
+            <button type="button" data-marks="4" data-negative="1">+4 / −1</button>
+            <button type="button" data-marks="1" data-negative="0">No negative</button>
+          </div>
+
+          <button class="primary-btn" type="submit">
+            <span>Generate AI Test</span><span>→</span>
+          </button>
+          <p class="fineprint">AI generates questions only. Timer and scoring are handled by the website.</p>
+        </form>
+      </div>
+    </section>
+
+    <section id="loadingScreen" class="screen center-screen">
+      <div class="loader-orb"><span></span></div>
+      <div class="eyebrow">BUILDING YOUR TEST</div>
+      <h2>Generating exam-ready questions…</h2>
+      <p id="loadingNote">Checking concepts, distractors and answer positions.</p>
+    </section>
+
+    <section id="adScreen" class="screen center-screen">
+      <div class="ad-card">
+        <div class="ad-label">ADVERTISEMENT</div>
+        <div class="ad-placeholder">
+          <div class="ad-icon">AD</div>
+          <h3>Your ad placement</h3>
+          <p id="adStatusText">After AdSense approval, a real web ad can appear here before the test starts.</p>
+          <div id="pretestAdSlot" class="live-ad-slot" hidden></div>
+        </div>
+        <div class="ready-strip">
+          <div>
+            <span>Your test is ready</span>
+            <strong id="readyTitle">Test</strong>
+          </div>
+          <div class="ready-actions">
+            <button id="shareReadyBtn" class="ghost-btn" type="button">Share Test</button>
+            <button id="startTestBtn" class="primary-btn compact" type="button">Start Test →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="testScreen" class="screen">
+      <div class="test-shell">
+        <aside class="test-sidebar">
+          <div class="sidebar-title">Question Palette</div>
+          <div class="palette-legend">
+            <span><i class="dot answered"></i>Answered</span>
+            <span><i class="dot current"></i>Current</span>
+          </div>
+          <div id="palette" class="palette"></div>
+          <div class="sidebar-summary">
+            <div><span>Answered</span><strong id="answeredCount">0</strong></div>
+            <div><span>Remaining</span><strong id="remainingCount">0</strong></div>
+          </div>
+        </aside>
+
+        <div class="test-main">
+          <div class="test-head">
+            <div>
+              <div class="mini-label" id="testTopicLabel">AI TEST</div>
+              <h2 id="testTitle">Generated Test</h2>
+            </div>
+            <div class="timer" id="timer">20:00</div>
+          </div>
+
+          <div class="progress-track"><div id="progressBar"></div></div>
+
+          <article class="question-card">
+            <div class="question-meta">
+              <span id="questionNo">Question 1 of 20</span>
+              <button id="clearAnswer" class="text-btn">Clear answer</button>
+            </div>
+            <h3 id="questionText"></h3>
+            <div id="options" class="options"></div>
+          </article>
+
+          <div class="test-nav">
+            <button id="prevBtn" class="ghost-btn">← Previous</button>
+            <button id="submitBtn" class="danger-outline">Submit Test</button>
+            <button id="nextBtn" class="primary-btn compact">Next →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="resultScreen" class="screen">
+      <div class="results-wrap">
+        <div class="result-hero">
+          <div class="eyebrow">TEST COMPLETED</div>
+          <h2>Your result is ready.</h2>
+          <div class="score-ring"><span id="scorePercent">0%</span><small>Score</small></div>
+          <div class="score-value"><strong id="scoreValue">0</strong><span id="maxScore">/ 0 marks</span></div>
+          <div class="result-actions">
+            <button id="shareResultBtn" class="ghost-btn" type="button">Share This Test</button>
+            <button id="newTestBtn" class="primary-btn compact">Create Another Test</button>
+          </div>
+        </div>
+
+        <div class="metrics" id="metrics"></div>
+
+        <div class="review-head">
+          <div><span class="mini-label">ANSWER REVIEW</span><h3>Solutions & Explanations</h3></div>
+        </div>
+        <div id="reviewList" class="review-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">Generated practice tests should be reviewed before use in high-stakes exams. <span>© TestForge AI</span></footer>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "ai-test-generator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-powered timed MCQ test generator with server-side scoring",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

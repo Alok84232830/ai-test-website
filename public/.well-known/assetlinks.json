@@ -7,7 +7,8 @@
       "namespace": "android_app",
       "package_name": "com.aspirant4u.testai",
       "sha256_cert_fingerprints": [
-        "7D:6E:57:26:26:D6:33:62:3A:FB:C4:D4:1A:61:BA:44:65:67:DA:CE:83:A3:53:06:D5:E9:C6:39:8D:79:B9:EC"
+        "7D:6E:57:26:26:D6:33:62:3A:FB:C4:D4:1A:61:BA:44:65:67:DA:CE:83:A3:53:06:D5:E9:C6:39:8D:79:B9:EC",
+        "2D:B1:AB:ED:88:7F:D0:70:E6:C2:5F:DA:60:72:2A:50:5E:ED:BB:09:9A:E0:B1:51:EF:BE:62:AC:C8:41:D5:43"
       ]
     }
   }

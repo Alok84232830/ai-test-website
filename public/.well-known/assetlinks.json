@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.aspirant4u.testai",
+      "sha256_cert_fingerprints": [
+        "7D:6E:57:26:26:D6:33:62:3A:FB:C4:D4:1A:61:BA:44:65:67:DA:CE:83:A3:53:06:D5:E9:C6:39:8D:79:B9:EC"
+      ]
+    }
+  }
+]

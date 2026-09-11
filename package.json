@@ -1,8 +1,8 @@
 {
-  "name": "ai-test-generator",
-  "version": "1.0.0",
+  "name": "aspirant-test-ai",
+  "version": "2.0.0",
   "private": true,
-  "description": "AI-powered timed MCQ test generator with server-side scoring",
+  "description": "ASPIRANT TEST AI - AI test generator with email login, credits, sharing, rankings and ads",
   "scripts": {
     "start": "node server.js"
   },

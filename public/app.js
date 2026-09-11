@@ -1,232 +1,57 @@
 const $ = s => document.querySelector(s);
-const screens = ['setupScreen','loadingScreen','adScreen','testScreen','resultScreen'];
-let currentTest = null;
-let answers = {};
-let currentIndex = 0;
-let timerInterval = null;
-let secondsLeft = 0;
-let submitting = false;
-let serviceStatus = {};
+const screens=['setupScreen','loadingScreen','adScreen','testScreen','resultScreen'];
+let currentTest=null,answers={},currentIndex=0,timerInterval=null,secondsLeft=0,totalSeconds=0,submitting=false,serviceStatus={};
+let session={access_token:localStorage.getItem('ata_access')||'',refresh_token:localStorage.getItem('ata_refresh')||''};
+let me=null,authMode='login',startAfterLogin=false;
 
-function showScreen(id){
-  screens.forEach(s => $(`#${s}`).classList.toggle('active', s === id));
-  window.scrollTo({top:0,behavior:'instant'});
-}
-function toast(msg){
-  const el=$('#toast'); el.textContent=msg; el.classList.add('show');
-  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),2800);
-}
-function esc(str){return String(str).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function showScreen(id){screens.forEach(s=>$('#'+s).classList.toggle('active',s===id));window.scrollTo({top:0,behavior:'instant'});}
+function toast(msg){const el=$('#toast');el.textContent=msg;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),3300);}
+function esc(str){return String(str??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function saveSession(d){if(d?.access_token){session.access_token=d.access_token;localStorage.setItem('ata_access',d.access_token)}if(d?.refresh_token){session.refresh_token=d.refresh_token;localStorage.setItem('ata_refresh',d.refresh_token)}}
+function clearSession(){session={access_token:'',refresh_token:''};localStorage.removeItem('ata_access');localStorage.removeItem('ata_refresh');me=null;renderAccount();}
 
-async function status(){
-  try{
-    const r=await fetch('/api/status'); const d=await r.json();
-    serviceStatus=d;
-    const badge=$('#aiBadge');
-    badge.textContent=d.aiConfigured ? `AI • ${d.model}` : 'Demo mode • add API key';
-    badge.classList.toggle('demo',!d.aiConfigured);
-  }catch{}
-}
+async function rawFetch(url,opts={}){const headers={...(opts.headers||{})};if(session.access_token)headers.Authorization=`Bearer ${session.access_token}`;return fetch(url,{...opts,headers});}
+async function refreshSession(){if(!session.refresh_token)return false;try{const r=await fetch('/api/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token})});const d=await r.json();if(!r.ok)throw new Error();saveSession(d);return true}catch{clearSession();return false}}
+async function authFetch(url,opts={}){let r=await rawFetch(url,opts);if(r.status===401&&session.refresh_token&&await refreshSession())r=await rawFetch(url,opts);return r;}
 
-function getShareUrl(){
-  if(!currentTest?.testId)return location.origin;
-  return `${location.origin}/?test=${encodeURIComponent(currentTest.testId)}`;
-}
+async function status(){try{const r=await fetch('/api/status');serviceStatus=await r.json();$('#rewardedStatus').textContent=serviceStatus.rewardedAdsEnabled?'Rewarded ads enabled':'Setup required';}catch{}}
+async function loadMe(){if(!session.access_token){me=null;renderAccount();return false}try{const r=await authFetch('/api/me');const d=await r.json();if(!r.ok)throw new Error(d.error||'Session expired');me=d;renderAccount();return true}catch{clearSession();return false}}
+function renderAccount(){const logged=!!me?.profile;$('#loginBtn').hidden=logged;$('#accountBtn').hidden=!logged;$('#creditPill').hidden=!logged;$('#accountSummary').hidden=!logged;if(!logged){$('#generationHint').textContent='Login with email to use your 2 free tests.';return}const p=me.profile,r=me.referrals||{progress:0,total:0};$('#topCredits').textContent=p.credits;$('#summaryEmail').textContent=p.display_name||p.email;$('#summaryFree').textContent=p.free_tests_remaining;$('#summaryCredits').textContent=p.credits;$('#summaryReferral').textContent=`${r.progress} / 10`;$('#generationHint').textContent=p.free_tests_remaining>0?`${p.free_tests_remaining} free AI test${p.free_tests_remaining===1?'':'s'} remaining.`:p.credits>0?`${p.credits} test credit${p.credits===1?'':'s'} available.`:'No generation credit. Share your tests to earn more.';}
 
-async function shareCurrentTest(){
-  if(!currentTest)return toast('Generate or open a test first.');
-  const url=getShareUrl();
-  const title=currentTest.title || 'AI Generated Test';
-  const text=`Take this ${currentTest.settings.count}-question test: ${title}`;
-  try{
-    if(navigator.share){
-      await navigator.share({title,text,url});
-    }else if(navigator.clipboard){
-      await navigator.clipboard.writeText(url);
-      toast('Test link copied. Share it with students.');
-    }else{
-      prompt('Copy this test link:',url);
-    }
-  }catch(err){
-    if(err?.name!=='AbortError')toast('Could not share. Please copy the link manually.');
-  }
-}
+function openAuth(mode='login'){authMode=mode;$('#authModal').hidden=false;syncAuthMode();setTimeout(()=>$('#authEmail').focus(),20)}
+function closeAuth(){if(startAfterLogin)startAfterLogin=false;$('#authModal').hidden=true}
+function syncAuthMode(){const signup=authMode==='signup';$('#authTitle').textContent=signup?'Create account':'Sign in';$('#authSubtitle').textContent=signup?'Email + password account. No OTP login.':'Use your email and password. No OTP login.';$('#displayNameField').hidden=!signup;$('#authSubmit').textContent=signup?'Create Account':'Sign In';$('#authSwitch').textContent=signup?'Already registered? Sign in':'New here? Create account';$('#authPassword').autocomplete=signup?'new-password':'current-password';}
+$('#loginBtn').onclick=()=>openAuth('login');$('#closeAuth').onclick=closeAuth;$('#authSwitch').onclick=()=>{authMode=authMode==='login'?'signup':'login';syncAuthMode()};
+$('#authModal').addEventListener('click',e=>{if(e.target===$('#authModal'))closeAuth()});
+$('#authForm').addEventListener('submit',async e=>{e.preventDefault();const payload={email:$('#authEmail').value.trim(),password:$('#authPassword').value,displayName:$('#displayName').value.trim()};$('#authSubmit').disabled=true;try{const endpoint=authMode==='signup'?'/api/auth/signup':'/api/auth/login';const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Authentication failed');if(d.access_token){saveSession(d);await loadMe();$('#authModal').hidden=true;toast(authMode==='signup'?'Account created. 2 free tests added.':'Signed in successfully.');if(startAfterLogin){startAfterLogin=false;beginTest();}}else{toast(d.message||'Check your email, then sign in.');authMode='login';syncAuthMode()}}catch(err){toast(err.message)}finally{$('#authSubmit').disabled=false}});
 
-function renderPretestAd(){
-  const host=$('#pretestAdSlot');
-  const placeholder=$('.ad-placeholder');
-  if(!serviceStatus.adsenseClient || !serviceStatus.pretestAdSlot){
-    if(host)host.hidden=true;
-    if(placeholder)placeholder.classList.remove('has-live-ad');
-    return;
-  }
-  if(host && !host.dataset.loaded){
-    host.hidden=false;
-    host.dataset.loaded='1';
-    host.innerHTML=`<ins class="adsbygoogle" style="display:block" data-ad-client="${esc(serviceStatus.adsenseClient)}" data-ad-slot="${esc(serviceStatus.pretestAdSlot)}" data-ad-format="auto" data-full-width-responsive="true"></ins>`;
-    try{(window.adsbygoogle=window.adsbygoogle||[]).push({});}catch{}
-    $('#adStatusText').textContent='Advertisement';
-    placeholder.classList.add('has-live-ad');
-  }
-}
+$('#accountBtn').onclick=()=>{if(!me)return;const p=me.profile,r=me.referrals||{total:0,progress:0};$('#accountName').textContent=p.display_name||'Student';$('#accountEmail').textContent=p.email||'';$('#accountFree').textContent=p.free_tests_remaining;$('#accountCredits').textContent=p.credits;$('#accountRefs').textContent=r.total;$('#refProgressText').textContent=`${r.progress} / 10 toward next test credit`;$('#refProgressBar').style.width=`${Math.min(100,r.progress*10)}%`;$('#accountModal').hidden=false};
+$('#closeAccount').onclick=()=>$('#accountModal').hidden=true;$('#accountModal').addEventListener('click',e=>{if(e.target===$('#accountModal'))$('#accountModal').hidden=true});$('#logoutBtn').onclick=()=>{clearSession();$('#accountModal').hidden=true;toast('Logged out.');};
 
-async function loadSharedTestFromUrl(){
-  const id=new URLSearchParams(location.search).get('test');
-  if(!id)return;
-  showScreen('loadingScreen');
-  $('#loadingNote').textContent='Loading the shared test…';
-  try{
-    const r=await fetch(`/api/test/${encodeURIComponent(id)}`);
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error||'Could not load shared test.');
-    currentTest=d; answers={}; currentIndex=0;
-    $('#readyTitle').textContent=`${d.settings.count} questions • ${d.settings.minutes} min • ${d.settings.topic}`;
-    showReadyScreen();
-  }catch(err){
-    history.replaceState({},'',location.pathname);
-    showScreen('setupScreen'); toast(err.message);
-  }
-}
+function getShareUrl(){return currentTest?.testId?`${location.origin}/?test=${encodeURIComponent(currentTest.testId)}`:location.origin}
+async function shareCurrentTest(){if(!currentTest)return toast('Generate or open a test first.');const url=getShareUrl(),title=currentTest.title||'ASPIRANT TEST AI',text=`Take this ${currentTest.settings.count}-question ${currentTest.settings.topic} test on ASPIRANT TEST AI.`;try{if(navigator.share)await navigator.share({title,text,url});else if(navigator.clipboard){await navigator.clipboard.writeText(url);toast('Test link copied. Share it with students.')}else prompt('Copy this test link:',url)}catch(err){if(err?.name!=='AbortError')toast('Could not share. Copy the link manually.')}}
 
-async function init(){
-  await status();
-  await loadSharedTestFromUrl();
-}
-init();
+function renderAd(hostId,boxId,slot,kind){const host=$(hostId),box=$(boxId);if(!host)return;if(!serviceStatus.adsenseClient||!slot){host.hidden=true;return}if(host.dataset.loaded)return;host.hidden=false;host.dataset.loaded='1';host.innerHTML=`<ins class="adsbygoogle" style="display:block" data-ad-client="${esc(serviceStatus.adsenseClient)}" data-ad-slot="${esc(slot)}" data-ad-format="auto" data-full-width-responsive="true"></ins>`;try{(window.adsbygoogle=window.adsbygoogle||[]).push({})}catch{}if(box)box.classList.add('has-live-ad');if(kind==='pretest')$('#adStatusText').textContent='Advertisement';if(kind==='result')$('#resultAdFallback').hidden=true;}
+function renderPretestAd(){renderAd('#pretestAdSlot','#pretestAdBox',serviceStatus.pretestAdSlot,'pretest')}
+function renderResultAd(){renderAd('#resultAdSlot',null,serviceStatus.resultAdSlot,'result')}
 
-$('.presets').addEventListener('click',e=>{
-  const b=e.target.closest('button'); if(!b)return;
-  $('#marks').value=b.dataset.marks; $('#negative').value=b.dataset.negative;
-});
+async function loadSharedTest(){const id=new URLSearchParams(location.search).get('test');if(!id)return;showScreen('loadingScreen');$('#loadingNote').textContent='Loading the shared test…';try{const r=await fetch(`/api/test/${encodeURIComponent(id)}`),d=await r.json();if(!r.ok)throw new Error(d.error||'Could not load shared test.');currentTest=d;answers={};currentIndex=0;$('#readyTitle').textContent=`${d.settings.count} questions • ${d.settings.minutes} min • ${d.settings.topic}`;showReadyScreen();}catch(err){history.replaceState({},'',location.pathname);showScreen('setupScreen');toast(err.message)}}
+async function init(){await status();await loadMe();await loadSharedTest()}init();
 
-$('#generatorForm').addEventListener('submit',async e=>{
-  e.preventDefault();
-  const count=Math.max(5,Math.min(50,Number($('#count').value)||20));
-  $('#count').value=count;
-  const payload={
-    topic:$('#topic').value.trim(), exam:$('#exam').value.trim(), count,
-    minutes:Number($('#minutes').value), difficulty:$('#difficulty').value,
-    language:$('#language').value, marks:Number($('#marks').value), negative:Number($('#negative').value)
-  };
-  if(!payload.topic)return toast('Please enter a topic.');
-  showScreen('loadingScreen');
-  $('#loadingNote').textContent='Checking concepts, distractors and answer positions.';
-  try{
-    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error||'Generation failed');
-    currentTest=d; answers={}; currentIndex=0;
-    history.replaceState({},'',`/?test=${encodeURIComponent(d.testId)}`);
-    $('#readyTitle').textContent=`${d.settings.count} questions • ${d.settings.minutes} min • ${d.settings.topic}`;
-    showReadyScreen();
-    if(!d.persistent)toast('Test works now. Add Supabase before launch for permanent share links.');
-  }catch(err){
-    showScreen('setupScreen'); toast(err.message);
-  }
-});
-
-function showReadyScreen(){
-  showScreen('adScreen');
-  $('#startTestBtn').disabled=false;
-  $('#startTestBtn').textContent='Start Test →';
-  renderPretestAd();
-}
-
-$('#shareReadyBtn').addEventListener('click',shareCurrentTest);
-$('#shareResultBtn').addEventListener('click',shareCurrentTest);
-
-$('#startTestBtn').addEventListener('click',()=>{
-  if(!currentTest)return;
-  showScreen('testScreen');
-  $('#testTitle').textContent=currentTest.title;
-  $('#testTopicLabel').textContent=currentTest.settings.exam || 'AI GENERATED TEST';
-  secondsLeft=currentTest.settings.minutes*60;
-  renderPalette(); renderQuestion(); startTimer();
-});
-
-function startTimer(){
-  clearInterval(timerInterval); updateTimer();
-  timerInterval=setInterval(()=>{
-    secondsLeft--; updateTimer();
-    if(secondsLeft<=0){clearInterval(timerInterval);toast('Time is over. Submitting test…');submitTest(true);}
-  },1000);
-}
-function updateTimer(){
-  const m=Math.floor(Math.max(0,secondsLeft)/60),s=Math.max(0,secondsLeft)%60;
-  $('#timer').textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  $('#timer').style.background=secondsLeft<=60?'#b42318':'#111827';
-}
-
-function renderPalette(){
-  const p=$('#palette'); p.innerHTML='';
-  currentTest.questions.forEach((q,i)=>{
-    const b=document.createElement('button'); b.textContent=i+1;
-    if(i===currentIndex)b.classList.add('current');
-    if(Number.isInteger(answers[i]))b.classList.add('answered');
-    b.onclick=()=>{currentIndex=i;renderQuestion();renderPalette();}; p.appendChild(b);
-  });
-  const answered=Object.keys(answers).filter(k=>Number.isInteger(answers[k])).length;
-  $('#answeredCount').textContent=answered;
-  $('#remainingCount').textContent=currentTest.questions.length-answered;
-}
-function renderQuestion(){
-  const q=currentTest.questions[currentIndex], total=currentTest.questions.length;
-  $('#questionNo').textContent=`Question ${currentIndex+1} of ${total}`;
-  $('#questionText').textContent=q.question;
-  $('#progressBar').style.width=`${((currentIndex+1)/total)*100}%`;
-  const o=$('#options');o.innerHTML='';
-  q.options.forEach((text,i)=>{
-    const b=document.createElement('button');b.className='option'+(answers[currentIndex]===i?' selected':'');
-    b.innerHTML=`<span class="option-key">${String.fromCharCode(65+i)}</span><span class="option-text">${esc(text)}</span>`;
-    b.onclick=()=>{answers[currentIndex]=i;renderQuestion();renderPalette();};o.appendChild(b);
-  });
-  $('#prevBtn').disabled=currentIndex===0;
-  $('#nextBtn').textContent=currentIndex===total-1?'Review →':'Next →';
-}
-$('#prevBtn').onclick=()=>{if(currentIndex>0){currentIndex--;renderQuestion();renderPalette();}};
-$('#nextBtn').onclick=()=>{if(currentIndex<currentTest.questions.length-1){currentIndex++;renderQuestion();renderPalette();}else toast('You are on the last question. Submit when ready.');};
-$('#clearAnswer').onclick=()=>{delete answers[currentIndex];renderQuestion();renderPalette();};
-$('#submitBtn').onclick=()=>{
-  const rem=currentTest.questions.length-Object.keys(answers).length;
-  if(confirm(rem?`${rem} question(s) are unattempted. Submit test?`:'Submit your test now?'))submitTest(false);
-};
-
-async function submitTest(auto=false){
-  if(submitting||!currentTest)return; submitting=true; clearInterval(timerInterval);
-  try{
-    const normalized={}; Object.entries(answers).forEach(([k,v])=>normalized[k]=v);
-    const r=await fetch('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({testId:currentTest.testId,answers:normalized})});
-    const d=await r.json(); if(!r.ok)throw new Error(d.error||'Submission failed');
-    renderResults(d); showScreen('resultScreen');
-  }catch(err){ toast(err.message); if(!auto)startTimer(); }
-  finally{submitting=false;}
-}
-
-function renderResults(d){
-  $('#scorePercent').textContent=`${d.percentage}%`;
-  $('#scoreValue').textContent=d.score;
-  $('#maxScore').textContent=`/ ${d.maxScore} marks`;
-  $('.score-ring').style.background=`conic-gradient(var(--accent) ${Math.max(0,Math.min(100,d.percentage))*3.6}deg,#eee 0deg)`;
-  $('#metrics').innerHTML=`
-    <div class="metric"><span>Correct</span><strong>${d.correct}</strong></div>
-    <div class="metric"><span>Wrong</span><strong>${d.wrong}</strong></div>
-    <div class="metric"><span>Unattempted</span><strong>${d.unattempted}</strong></div>
-    <div class="metric"><span>Negative Marks</span><strong>${(d.wrong*d.settings.negative).toFixed(2)}</strong></div>`;
-  $('#reviewList').innerHTML=d.review.map((r,i)=>{
-    const cls=r.isUnattempted?'skip':r.isCorrect?'good':'bad';
-    const selected=r.selectedIndex===null?'Not attempted':`${String.fromCharCode(65+r.selectedIndex)}. ${esc(r.options[r.selectedIndex])}`;
-    const correct=`${String.fromCharCode(65+r.correctIndex)}. ${esc(r.options[r.correctIndex])}`;
-    return `<article class="review-item ${cls}">
-      <div class="review-q">Q${i+1}. ${esc(r.question)}</div>
-      <div class="review-lines"><span><b>Your answer:</b> ${selected}</span><span><b>Correct answer:</b> ${correct}</span></div>
-      <div class="explanation"><b>Explanation:</b> ${esc(r.explanation)}</div>
-    </article>`;
-  }).join('');
-}
-
-function reset(){
-  clearInterval(timerInterval);currentTest=null;answers={};currentIndex=0;
-  history.replaceState({},'',location.pathname);
-  showScreen('setupScreen');
-}
+$('.presets').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;$('#marks').value=b.dataset.marks;$('#negative').value=b.dataset.negative});
+$('#generatorForm').addEventListener('submit',async e=>{e.preventDefault();if(!me){openAuth('login');return}const count=Math.max(5,Math.min(50,Number($('#count').value)||20));$('#count').value=count;const payload={topic:$('#topic').value.trim(),exam:$('#exam').value.trim(),count,minutes:Number($('#minutes').value),difficulty:$('#difficulty').value,language:$('#language').value,marks:Number($('#marks').value),negative:Number($('#negative').value)};if(!payload.topic)return toast('Please enter a topic.');showScreen('loadingScreen');try{const r=await authFetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){if(d.code==='NO_TEST_CREDIT'){showScreen('setupScreen');await loadMe();$('#accountBtn').click();throw new Error(d.error)}throw new Error(d.error||'Generation failed')}currentTest=d;answers={};currentIndex=0;history.replaceState({},'',`/?test=${encodeURIComponent(d.testId)}`);$('#readyTitle').textContent=`${d.settings.count} questions • ${d.settings.minutes} min • ${d.settings.topic}`;if(d.profile){me.profile=d.profile;renderAccount()}showReadyScreen();}catch(err){if(!currentTest)showScreen('setupScreen');toast(err.message)}});
+function showReadyScreen(){showScreen('adScreen');$('#startTestBtn').disabled=false;renderPretestAd()}
+$('#shareReadyBtn').onclick=shareCurrentTest;$('#shareResultBtn').onclick=shareCurrentTest;
+$('#startTestBtn').onclick=()=>{if(!me){startAfterLogin=true;openAuth('login');return}beginTest()};
+function beginTest(){if(!currentTest)return;showScreen('testScreen');$('#testTitle').textContent=currentTest.title;$('#testTopicLabel').textContent=currentTest.settings.exam||'ASPIRANT TEST AI';totalSeconds=currentTest.settings.minutes*60;secondsLeft=totalSeconds;renderPalette();renderQuestion();startTimer()}
+function startTimer(){clearInterval(timerInterval);updateTimer();timerInterval=setInterval(()=>{secondsLeft--;updateTimer();if(secondsLeft<=0){clearInterval(timerInterval);toast('Time is over. Submitting test…');submitTest(true)}},1000)}
+function updateTimer(){const m=Math.floor(Math.max(0,secondsLeft)/60),s=Math.max(0,secondsLeft)%60;$('#timer').textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;$('#timer').style.background=secondsLeft<=60?'#b42318':'#111827'}
+function renderPalette(){const p=$('#palette');p.innerHTML='';currentTest.questions.forEach((q,i)=>{const b=document.createElement('button');b.textContent=i+1;if(i===currentIndex)b.classList.add('current');if(Number.isInteger(answers[i]))b.classList.add('answered');b.onclick=()=>{currentIndex=i;renderQuestion();renderPalette()};p.appendChild(b)});const answered=Object.keys(answers).filter(k=>Number.isInteger(answers[k])).length;$('#answeredCount').textContent=answered;$('#remainingCount').textContent=currentTest.questions.length-answered}
+function renderQuestion(){const q=currentTest.questions[currentIndex],total=currentTest.questions.length;$('#questionNo').textContent=`Question ${currentIndex+1} of ${total}`;$('#questionText').textContent=q.question;$('#progressBar').style.width=`${((currentIndex+1)/total)*100}%`;const o=$('#options');o.innerHTML='';q.options.forEach((text,i)=>{const b=document.createElement('button');b.className='option'+(answers[currentIndex]===i?' selected':'');b.innerHTML=`<span class="option-key">${String.fromCharCode(65+i)}</span><span class="option-text">${esc(text)}</span>`;b.onclick=()=>{answers[currentIndex]=i;renderQuestion();renderPalette()};o.appendChild(b)});$('#prevBtn').disabled=currentIndex===0;$('#nextBtn').textContent=currentIndex===total-1?'Review →':'Next →'}
+$('#prevBtn').onclick=()=>{if(currentIndex>0){currentIndex--;renderQuestion();renderPalette()}};$('#nextBtn').onclick=()=>{if(currentIndex<currentTest.questions.length-1){currentIndex++;renderQuestion();renderPalette()}else toast('Last question. Submit when ready.')};$('#clearAnswer').onclick=()=>{delete answers[currentIndex];renderQuestion();renderPalette()};$('#submitBtn').onclick=()=>{const rem=currentTest.questions.length-Object.keys(answers).length;if(confirm(rem?`${rem} question(s) are unattempted. Submit test?`:'Submit your test now?'))submitTest(false)};
+async function submitTest(auto=false){if(submitting||!currentTest)return;submitting=true;clearInterval(timerInterval);try{const normalized={};Object.entries(answers).forEach(([k,v])=>normalized[k]=v);const r=await authFetch('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({testId:currentTest.testId,answers:normalized,timeSpentSeconds:Math.max(0,totalSeconds-secondsLeft)})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Submission failed');renderResults(d);showScreen('resultScreen');renderResultAd();loadLeaderboard(d.testId);await loadMe();if(d.credit_awarded_to_creator)toast('The test creator earned a referral credit.')}catch(err){toast(err.message);if(!auto)startTimer()}finally{submitting=false}}
+function renderResults(d){$('#scorePercent').textContent=`${d.percentage}%`;$('#scoreValue').textContent=d.score;$('#maxScore').textContent=`/ ${d.maxScore} marks`;$('.score-ring').style.background=`conic-gradient(var(--accent) ${Math.max(0,Math.min(100,d.percentage))*3.6}deg,#eee 0deg)`;$('#rankValue').textContent=d.rank?`#${d.rank}`:'#—';$('#participantValue').textContent=d.participants??'—';$('#metrics').innerHTML=`<div class="metric"><span>Correct</span><strong>${d.correct}</strong></div><div class="metric"><span>Wrong</span><strong>${d.wrong}</strong></div><div class="metric"><span>Unattempted</span><strong>${d.unattempted}</strong></div><div class="metric"><span>Negative Marks</span><strong>${(d.wrong*d.settings.negative).toFixed(2)}</strong></div>`;$('#reviewList').innerHTML=d.review.map((r,i)=>{const cls=r.isUnattempted?'skip':r.isCorrect?'good':'bad',selected=r.selectedIndex===null?'Not attempted':`${String.fromCharCode(65+r.selectedIndex)}. ${esc(r.options[r.selectedIndex])}`,correct=`${String.fromCharCode(65+r.correctIndex)}. ${esc(r.options[r.correctIndex])}`;return `<article class="review-item ${cls}"><div class="review-q">Q${i+1}. ${esc(r.question)}</div><div class="review-lines"><span><b>Your answer:</b> ${selected}</span><span><b>Correct answer:</b> ${correct}</span></div><div class="explanation"><b>Explanation:</b> ${esc(r.explanation)}</div></article>`}).join('')}
+function fmtTime(sec){sec=Math.max(0,Number(sec)||0);const m=Math.floor(sec/60),s=sec%60;return `${m}:${String(s).padStart(2,'0')}`}
+async function loadLeaderboard(testId){try{const r=await fetch(`/api/leaderboard/${encodeURIComponent(testId)}`),d=await r.json();const el=$('#leaderboard');if(!d.leaders?.length){el.innerHTML='<p class="muted">No ranking entries yet.</p>';return}el.innerHTML=d.leaders.map(x=>`<div class="leader-row"><span class="leader-rank">#${x.rank}</span><strong>${esc(x.name)}</strong><span>${Number(x.percentage).toFixed(1)}%</span><span class="leader-time">${fmtTime(x.timeSpentSeconds)}</span></div>`).join('')}catch{}}
+function reset(){clearInterval(timerInterval);currentTest=null;answers={};currentIndex=0;history.replaceState({},'',location.pathname);showScreen('setupScreen');loadMe()}
 $('#newTestBtn').onclick=reset;$('#newTestTop').onclick=reset;

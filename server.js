@@ -381,7 +381,7 @@ function serveStatic(req, res) {
   fs.readFile(filePath, (err,data) => {
     if (err) { res.writeHead(404, {'Content-Type':'text/plain; charset=utf-8'}); return res.end('Not found'); }
     const ext = path.extname(filePath).toLowerCase();
-    const types = { '.html':'text/html', '.css':'text/css', '.js':'application/javascript', '.svg':'image/svg+xml', '.json':'application/json' };
+    const types = { '.html':'text/html', '.css':'text/css', '.js':'application/javascript', '.svg':'image/svg+xml', '.json':'application/json', '.webmanifest':'application/manifest+json', '.png':'image/png', '.ico':'image/x-icon' };
     let output = data;
     if (ext === '.html') output = Buffer.from(data.toString('utf8').replace('<!-- ADSENSE_HEAD -->', adsenseHeadSnippet()), 'utf8');
     res.writeHead(200, {'Content-Type':`${types[ext] || 'application/octet-stream'}; charset=utf-8`});
